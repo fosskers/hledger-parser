@@ -4,6 +4,7 @@
 
 use nom::character::complete::{alpha1, char, digit1, space1};
 use nom::combinator::{fail, map_res, opt};
+use nom::number::complete::double;
 use nom::IResult;
 use time::{Date, Month};
 
@@ -48,6 +49,7 @@ pub struct Line {
 }
 
 /// A monetary value, hopefully paired with a currency marker.
+#[derive(Debug)]
 pub struct Value {
     /// The actual monetary value.
     pub value: f64,
@@ -57,7 +59,18 @@ pub struct Value {
 
 impl Value {
     fn parse(i: &str) -> IResult<&str, Value> {
-        todo!()
+        let (i, value) = double(i)?;
+        let (i, currency) = opt(Value::parse_currency)(i)?;
+
+        let value = Value { value, currency };
+        Ok((i, value))
+    }
+
+    fn parse_currency(i: &str) -> IResult<&str, String> {
+        let (i, _) = space1(i)?;
+        let (i, currency) = alpha1(i)?;
+
+        Ok((i, currency.to_string()))
     }
 }
 
@@ -76,6 +89,7 @@ pub enum Exchange {
 /// Some updated price of a moving asset.
 ///
 /// > P 2022-07-12 TSLA 699.21 U
+#[derive(Debug)]
 pub struct Price {
     /// The date the new price was recorded.
     pub date: Date,
@@ -109,11 +123,15 @@ impl Price {
         let (i, asset) = alpha1(i)?;
         let (i, _) = space1(i)?;
         let (i, value) = Value::parse(i)?;
-        let (i, _) = space1(i)?;
-        let (i, comment) = opt(parse_comment)(i)?;
+        let (i, comment) = opt(Price::parse_comment)(i)?;
 
         let price = Price::new(date, asset, value, comment);
         Ok((i, price))
+    }
+
+    fn parse_comment(i: &str) -> IResult<&str, String> {
+        let (i, _) = space1(i)?;
+        parse_comment(i)
     }
 }
 
@@ -167,6 +185,8 @@ mod test {
     #[test]
     fn prices() {
         let price = "P 2022-07-12 TSLA 699.21 U";
-        assert!(Price::parse(price).is_ok());
+        let (_, parsed) = Price::parse(price).unwrap();
+        assert_eq!(parsed.asset, "TSLA");
+        assert_eq!(parsed.value.value, 699.21);
     }
 }
