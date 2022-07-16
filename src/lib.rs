@@ -2,6 +2,7 @@
 
 #![warn(missing_docs)]
 
+use nom::bytes::complete::take_till;
 use nom::character::complete::{alpha1, char, digit1, space1};
 use nom::combinator::{fail, map_res, opt};
 use nom::number::complete::double;
@@ -169,7 +170,10 @@ fn parse_month(i: &str) -> IResult<&str, Month> {
 }
 
 fn parse_comment(i: &str) -> IResult<&str, String> {
-    todo!()
+    let (i, _) = char(';')(i)?;
+    let (i, comment) = take_till(|c| c == '\n')(i)?;
+
+    Ok((i, comment.to_string()))
 }
 
 #[cfg(test)]
@@ -184,7 +188,7 @@ mod test {
 
     #[test]
     fn prices() {
-        let price = "P 2022-07-12 TSLA 699.21 U";
+        let price = "P 2022-07-12 TSLA 699.21 U ; great buy?";
         let (_, parsed) = Price::parse(price).unwrap();
         assert_eq!(parsed.asset, "TSLA");
         assert_eq!(parsed.value.value, 699.21);
