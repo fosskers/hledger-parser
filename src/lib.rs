@@ -2,7 +2,7 @@
 
 #![warn(missing_docs)]
 
-use nom::bytes::complete::take_till;
+use nom::bytes::complete::{take_till, take_till1};
 use nom::character::complete::{alpha1, char, digit1, space1};
 use nom::combinator::{fail, map_res, opt};
 use nom::number::complete::double;
@@ -25,6 +25,8 @@ pub struct Entry {
     pub date: Date,
     /// A short description appearing on the same line as the date.
     pub description: String,
+    /// A potential comment after the description.
+    pub comment: Option<String>,
     /// At least two [`Line`]s with any amount of comments peppered in between.
     pub lines: Vec<LineOrComment>,
 }
@@ -42,11 +44,72 @@ pub struct Line {
     /// Something like `expenses:food`.
     pub account: String,
     /// The monetary value.
+    pub value: Option<ValueAndExchange>,
+    /// A possible comment.
+    pub comment: Option<String>,
+}
+
+impl Line {
+    fn parse(i: &str) -> IResult<&str, Line> {
+        let (i, account) = Line::parse_account(i)?;
+        let (i, value) = opt(Line::parse_value)(i)?;
+        let (i, comment) = opt(Line::parse_comment)(i)?;
+
+        let line = Line {
+            account,
+            value,
+            comment,
+        };
+        Ok((i, line))
+    }
+
+    fn parse_account(i: &str) -> IResult<&str, String> {
+        let (i, account) = take_till1(|c| c == ' ' || c == '\n')(i)?;
+
+        Ok((i, account.to_string()))
+    }
+
+    fn parse_value(i: &str) -> IResult<&str, ValueAndExchange> {
+        let (i, _) = char(' ')(i)?;
+        let (i, _) = space1(i)?;
+        ValueAndExchange::parse(i)
+    }
+
+    fn parse_comment(i: &str) -> IResult<&str, String> {
+        let (i, _) = space1(i)?;
+        parse_comment(i)
+    }
+}
+
+/// A [`Value`] potentially paired with an [`Exchange`].
+pub struct ValueAndExchange {
+    /// Known symbols: `=`
+    pub symbol: Option<char>,
+    /// The monetary value.
     pub value: Value,
     /// A possible exchange rate.
     pub exchange: Option<Exchange>,
-    /// A possible comment.
-    pub comment: Option<String>,
+}
+
+impl ValueAndExchange {
+    fn parse(i: &str) -> IResult<&str, ValueAndExchange> {
+        let (i, symbol) = opt(char('='))(i)?;
+        let (i, _) = space1(i)?;
+        let (i, value) = Value::parse(i)?;
+        let (i, exchange) = opt(ValueAndExchange::parse_exchange)(i)?;
+
+        let vae = ValueAndExchange {
+            symbol,
+            value,
+            exchange,
+        };
+        Ok((i, vae))
+    }
+
+    fn parse_exchange(i: &str) -> IResult<&str, Exchange> {
+        let (i, _) = space1(i)?;
+        Exchange::parse(i)
+    }
 }
 
 /// A monetary value, hopefully paired with a currency marker.
@@ -85,6 +148,12 @@ pub enum Exchange {
     ///
     /// > 200000 YEN @@ 1927.20 CAD
     Total(Value),
+}
+
+impl Exchange {
+    fn parse(i: &str) -> IResult<&str, Exchange> {
+        todo!()
+    }
 }
 
 /// Some updated price of a moving asset.
@@ -179,6 +248,14 @@ fn parse_comment(i: &str) -> IResult<&str, String> {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn lines() {
+        let line = "assets:cash:stash    200000 Y @@ 1927.20 C";
+        let (rem, parsed) = Line::parse(line).unwrap();
+        assert_eq!("", rem);
+        // assert_eq!(200000, parsed.value.unwrap().value.value);
+    }
 
     #[test]
     fn dates() {
