@@ -2,12 +2,10 @@
 
 #![warn(missing_docs)]
 
-use nom::{
-    character::complete::{alpha1, char, space1},
-    combinator::opt,
-    IResult,
-};
-use time::Date;
+use nom::character::complete::{alpha1, char, digit1, space1};
+use nom::combinator::{fail, map_res, opt};
+use nom::IResult;
+use time::{Date, Month};
 
 /// A standalone block of text can represent a number of things.
 pub enum Block {
@@ -120,7 +118,36 @@ impl Price {
 }
 
 fn parse_date(i: &str) -> IResult<&str, Date> {
-    todo!()
+    let (i, year) = map_res(digit1, str::parse)(i)?;
+    let (i, _) = char('-')(i)?;
+    let (i, month) = parse_month(i)?;
+    let (i, _) = char('-')(i)?;
+    let (i, day) = map_res(digit1, str::parse)(i)?;
+
+    match Date::from_calendar_date(year, month, day) {
+        Ok(date) => Ok((i, date)),
+        Err(_) => fail(i),
+    }
+}
+
+fn parse_month(i: &str) -> IResult<&str, Month> {
+    let (i, m) = map_res(digit1, str::parse)(i)?;
+
+    match m {
+        1 => Ok((i, Month::January)),
+        2 => Ok((i, Month::February)),
+        3 => Ok((i, Month::March)),
+        4 => Ok((i, Month::April)),
+        5 => Ok((i, Month::May)),
+        6 => Ok((i, Month::June)),
+        7 => Ok((i, Month::July)),
+        8 => Ok((i, Month::August)),
+        9 => Ok((i, Month::September)),
+        10 => Ok((i, Month::October)),
+        11 => Ok((i, Month::November)),
+        12 => Ok((i, Month::December)),
+        _ => fail(i),
+    }
 }
 
 fn parse_comment(i: &str) -> IResult<&str, String> {
@@ -130,6 +157,12 @@ fn parse_comment(i: &str) -> IResult<&str, String> {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn dates() {
+        let date = "2022-07-16";
+        assert!(parse_date(date).is_ok());
+    }
 
     #[test]
     fn prices() {
