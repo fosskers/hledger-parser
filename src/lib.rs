@@ -3,9 +3,9 @@
 #![warn(missing_docs)]
 
 use nom::bytes::complete::{take_till, take_till1};
-use nom::character::complete::{alpha1, char, digit1, space1};
+use nom::character::complete::{alpha1, char, digit1, i64, space1, u64};
 use nom::combinator::{fail, map_res, opt};
-use nom::number::complete::double;
+use nom::multi::many0_count;
 use nom::IResult;
 use time::{Date, Month};
 
@@ -154,12 +154,24 @@ pub enum Number {
     /// - Signed value left of the decimal point.
     /// - The number of zeroes following the decimal point.
     /// - The final digits, as-is, if there are any.
-    Float(i64, u64, Option<u64>),
+    Float(i64, usize, Option<u64>),
 }
 
 impl Number {
     fn parse(i: &str) -> IResult<&str, Number> {
-        todo!()
+        let (i, int) = i64(i)?;
+        match opt(Number::parse_float_parts)(i)? {
+            (i, None) => Ok((i, Number::Int(int))),
+            (i, Some((zeroes, last))) => Ok((i, Number::Float(int, zeroes, last))),
+        }
+    }
+
+    fn parse_float_parts(i: &str) -> IResult<&str, (usize, Option<u64>)> {
+        let (i, _) = char('.')(i)?;
+        let (i, zeroes) = many0_count(char('0'))(i)?;
+        let (i, last) = opt(u64)(i)?;
+
+        Ok((i, (zeroes, last)))
     }
 }
 
@@ -297,6 +309,7 @@ mod test {
         let nums = [
             (Number::Int(600), "600"),
             (Number::Float(600, 3, None), "600.000"),
+            (Number::Float(600, 3, Some(123)), "600.000123"),
         ];
 
         nums.into_iter().for_each(|(exp, s)| {
@@ -304,6 +317,8 @@ mod test {
             assert_eq!("", rem);
             assert_eq!(exp, parsed);
         });
+
+        assert_eq!(Number::Int(600), Number::Float(600, 1000, None));
     }
 
     #[test]
@@ -323,7 +338,8 @@ mod test {
     #[test]
     fn prices() {
         let price = "P 2022-07-12 TSLA 699.21 U ; great buy?";
-        let (_, parsed) = Price::parse(price).unwrap();
+        let (rem, parsed) = Price::parse(price).unwrap();
+        assert_eq!("", rem);
         assert_eq!(parsed.asset, "TSLA");
         assert_eq!(parsed.value.value, Number::Float(699, 0, Some(21)));
     }
