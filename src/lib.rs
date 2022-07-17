@@ -116,14 +116,14 @@ impl ValueAndExchange {
 #[derive(Debug)]
 pub struct Value {
     /// The actual monetary value.
-    pub value: f64,
+    pub value: Number,
     /// Some currency marker like `CAD` or `YEN`.
     pub currency: Option<String>,
 }
 
 impl Value {
     fn parse(i: &str) -> IResult<&str, Value> {
-        let (i, value) = double(i)?;
+        let (i, value) = Number::parse(i)?;
         let (i, currency) = opt(Value::parse_currency)(i)?;
 
         let value = Value { value, currency };
@@ -135,6 +135,49 @@ impl Value {
         let (i, currency) = alpha1(i)?;
 
         Ok((i, currency.to_string()))
+    }
+}
+
+/// Either a plain integer or floating-point value.
+///
+/// Some currencies are not divisible. Even if they are, some entries made by
+/// the user do not include decimal values. If they don't, then we wouldn't want
+/// to render them with extra zeroes (etc.) during pretty-printing if they
+/// didn't start with any.
+#[derive(Debug)]
+pub enum Number {
+    /// An indivisible positive or negative integer.
+    Int(i64),
+    /// Any other number with decimal values.
+    ///
+    /// The three inner values are:
+    /// - Signed value left of the decimal point.
+    /// - The number of zeroes following the decimal point.
+    /// - The final digits, as-is, if there are any.
+    Float(i64, u64, Option<u64>),
+}
+
+impl Number {
+    fn parse(i: &str) -> IResult<&str, Number> {
+        todo!()
+    }
+}
+
+impl PartialEq for Number {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Number::Int(l), Number::Int(r)) => l == r,
+            (Number::Int(l), Number::Float(r, _, None)) => l == r,
+            (Number::Int(_), Number::Float(_, _, Some(_))) => false,
+            (Number::Float(l, _, None), Number::Int(r)) => l == r,
+            (Number::Float(_, _, Some(_)), Number::Int(_)) => false,
+            (Number::Float(l, _, None), Number::Float(r, _, None)) => l == r,
+            (Number::Float(_, _, Some(_)), Number::Float(_, _, None)) => false,
+            (Number::Float(_, _, None), Number::Float(_, _, Some(_))) => false,
+            (Number::Float(l, a, Some(x)), Number::Float(r, b, Some(y))) => {
+                l == r && a == b && x == y
+            }
+        }
     }
 }
 
@@ -250,6 +293,20 @@ mod test {
     use super::*;
 
     #[test]
+    fn numbers() {
+        let nums = [
+            (Number::Int(600), "600"),
+            (Number::Float(600, 3, None), "600.000"),
+        ];
+
+        nums.into_iter().for_each(|(exp, s)| {
+            let (rem, parsed) = Number::parse(s).unwrap();
+            assert_eq!("", rem);
+            assert_eq!(exp, parsed);
+        });
+    }
+
+    #[test]
     fn lines() {
         let line = "assets:cash:stash    200000 Y @@ 1927.20 C";
         let (rem, parsed) = Line::parse(line).unwrap();
@@ -268,6 +325,6 @@ mod test {
         let price = "P 2022-07-12 TSLA 699.21 U ; great buy?";
         let (_, parsed) = Price::parse(price).unwrap();
         assert_eq!(parsed.asset, "TSLA");
-        assert_eq!(parsed.value.value, 699.21);
+        assert_eq!(parsed.value.value, Number::Float(699, 0, Some(21)));
     }
 }
