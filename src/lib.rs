@@ -114,7 +114,7 @@ impl ValueAndExchange {
 }
 
 /// A monetary value, hopefully paired with a currency marker.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Value {
     /// The actual monetary value.
     pub value: Number,
@@ -145,7 +145,7 @@ impl Value {
 /// the user do not include decimal values. If they don't, then we wouldn't want
 /// to render them with extra zeroes (etc.) during pretty-printing if they
 /// didn't start with any.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Number {
     /// An indivisible positive or negative integer.
     Int(i64),
@@ -159,6 +159,14 @@ pub enum Number {
 }
 
 impl Number {
+    /// The whole integer section of this `Number`.
+    pub fn whole(&self) -> i64 {
+        match self {
+            Number::Int(n) => *n,
+            Number::Float(n, _, _) => *n,
+        }
+    }
+
     fn parse(i: &str) -> IResult<&str, Number> {
         let (i, int) = i64(i)?;
         match opt(Number::parse_float_parts)(i)? {
@@ -183,6 +191,14 @@ impl From<i64> for Number {
 }
 
 impl PartialEq for Number {
+    /// ```
+    /// use hledger_parser::Number;
+    ///
+    /// // Morally the same number.
+    /// let a = Number::Float(1, 0, Some(2));
+    /// let b = Number::Float(1, 0, Some(20));
+    /// assert_eq!(a, b);
+    /// ```
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Number::Int(l), Number::Int(r)) => l == r,
@@ -213,6 +229,14 @@ pub enum Exchange {
 }
 
 impl Exchange {
+    /// The inner numeric [`Value`].
+    pub fn value(&self) -> &Value {
+        match self {
+            Exchange::PerUnit(v) => v,
+            Exchange::Total(v) => v,
+        }
+    }
+
     fn parse(i: &str) -> IResult<&str, Exchange> {
         alt((Exchange::parse_total, Exchange::parse_per_unit))(i)
     }
@@ -349,7 +373,10 @@ mod test {
         let line = "assets:cash:stash    200000 Y @@ 1927.20 C";
         let (rem, parsed) = Line::parse(line).unwrap();
         assert_eq!("", rem);
-        // assert_eq!(200000, parsed.value.unwrap().value.value);
+        let vale = parsed.value.unwrap();
+        assert!(matches!(vale.value.value, Number::Int(200000)));
+        let exv = vale.exchange.unwrap().value().clone().value;
+        assert_eq!(Number::Float(1927, 0, Some(20)), exv);
     }
 
     #[test]
