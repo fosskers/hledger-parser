@@ -2,8 +2,9 @@
 
 #![warn(missing_docs)]
 
-use nom::bytes::complete::{take_till, take_till1};
-use nom::character::complete::{alpha1, char, digit1, i64, space1, u64};
+use nom::branch::alt;
+use nom::bytes::complete::{tag, take_till, take_till1};
+use nom::character::complete::{alpha1, char, digit1, i64, space0, space1, u64};
 use nom::combinator::{fail, map_res, opt};
 use nom::multi::many0_count;
 use nom::IResult;
@@ -94,7 +95,7 @@ pub struct ValueAndExchange {
 impl ValueAndExchange {
     fn parse(i: &str) -> IResult<&str, ValueAndExchange> {
         let (i, symbol) = opt(char('='))(i)?;
-        let (i, _) = space1(i)?;
+        let (i, _) = space0(i)?;
         let (i, value) = Value::parse(i)?;
         let (i, exchange) = opt(ValueAndExchange::parse_exchange)(i)?;
 
@@ -175,6 +176,12 @@ impl Number {
     }
 }
 
+impl From<i64> for Number {
+    fn from(n: i64) -> Self {
+        Number::Int(n)
+    }
+}
+
 impl PartialEq for Number {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -207,7 +214,23 @@ pub enum Exchange {
 
 impl Exchange {
     fn parse(i: &str) -> IResult<&str, Exchange> {
-        todo!()
+        alt((Exchange::parse_total, Exchange::parse_per_unit))(i)
+    }
+
+    fn parse_total(i: &str) -> IResult<&str, Exchange> {
+        let (i, _) = tag("@@")(i)?;
+        let (i, _) = space1(i)?;
+        let (i, value) = Value::parse(i)?;
+
+        Ok((i, Exchange::Total(value)))
+    }
+
+    fn parse_per_unit(i: &str) -> IResult<&str, Exchange> {
+        let (i, _) = char('@')(i)?;
+        let (i, _) = space1(i)?;
+        let (i, value) = Value::parse(i)?;
+
+        Ok((i, Exchange::PerUnit(value)))
     }
 }
 
