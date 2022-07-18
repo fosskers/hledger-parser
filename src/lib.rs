@@ -194,7 +194,8 @@ impl PartialEq for Number {
     /// ```
     /// use hledger_parser::Number;
     ///
-    /// // Morally the same number.
+    /// // Morally the same number, the second one just parsed with extra zeroes
+    /// // on the end.
     /// let a = Number::Float(1, 0, Some(2));
     /// let b = Number::Float(1, 0, Some(20));
     /// assert_eq!(a, b);
@@ -210,7 +211,7 @@ impl PartialEq for Number {
             (Number::Float(_, _, Some(_)), Number::Float(_, _, None)) => false,
             (Number::Float(_, _, None), Number::Float(_, _, Some(_))) => false,
             (Number::Float(l, a, Some(x)), Number::Float(r, b, Some(y))) => {
-                l == r && a == b && x == y
+                l == r && a == b && remove_zeroes(*x) == remove_zeroes(*y)
             }
         }
     }
@@ -347,9 +348,26 @@ fn parse_comment(i: &str) -> IResult<&str, String> {
     Ok((i, comment.to_string()))
 }
 
+fn remove_zeroes(mut n: u64) -> u64 {
+    while n % 10 == 0 {
+        n = n / 10;
+    }
+
+    n
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn zeroes() {
+        let a = 110000;
+        let b = 1000;
+
+        assert_eq!(11, remove_zeroes(a));
+        assert_eq!(1, remove_zeroes(b));
+    }
 
     #[test]
     fn numbers() {
